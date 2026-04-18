@@ -16,7 +16,7 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 
 # ==================== SOZLAMALAR ====================
-BOT_TOKEN = "7579301801:AAFRys9U1BKbLOA6u7pZUzUPWy0fo3As_-Y"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_USERNAME   = "@Nobody_ff2"
 ADMIN_TG_LINK    = "https://t.me/Nobody_ff2"
 REQUIRED_CHANNEL = "@premosit"
