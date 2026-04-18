@@ -25,7 +25,7 @@ CARD_OWNER       = "X.I."
 CARD_PHONE       = "+998-88-855-13-20"
 OWNER_ID         = 7362457858
 WEBAPP_URL       = "https://sakura-on.github.io/TopUp-Zone"
-DATA_FILE        = "bot_data.json"
+DATA_FILE = "/app/data/bot_data.json"
 
 # ── Stikerlar (file_id) ──
 STICKER_WELCOME = "CAACAgIAAxkBAAIBgWf2xgABHQUhQzFz8M_0vEklFLJvAAIyAAMw1J0R6OTAAWPy2rAeNgQ"
