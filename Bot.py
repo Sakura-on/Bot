@@ -16,7 +16,7 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 
 # ==================== SOZLAMALAR ====================
-BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_TOKEN = "7579301801:AAFRys9U1BKbLOA6u7pZUzUPWy0fo3As_-Y"
 ADMIN_USERNAME   = "@Nobody_ff2"
 ADMIN_TG_LINK    = "https://t.me/Nobody_ff2"
 REQUIRED_CHANNEL = "@premosit"
@@ -25,13 +25,15 @@ CARD_OWNER       = "X.I."
 CARD_PHONE       = "+998-88-855-13-20"
 OWNER_ID         = 7362457858
 WEBAPP_URL       = "https://sakura-on.github.io/TopUp-Zone"
-DATA_FILE        = "bot_data.json"
+DATA_FILE        = "/data/bot_data.json"
 
 # ── Stikerlar (file_id) ──
 STICKER_WELCOME = "CAACAgIAAxkBAAIBgWf2xgABHQUhQzFz8M_0vEklFLJvAAIyAAMw1J0R6OTAAWPy2rAeNgQ"
 STICKER_SUCCESS = "CAACAgIAAxkBAAIBgmf2xgABtgpP2yHqOeLr5wgB7BInAAI4AAMw1J0Rj2FLB-2RVqEeNgQ"
 STICKER_REJECT  = "CAACAgIAAxkBAAIBg2f2xgABpL3p0CqMjWF8FmDHVIwZAAI6AAMw1J0RvpFeBmkDL9keNgQ"
 STICKER_WAIT    = "CAACAgIAAxkBAAIBhGf2xgABfmoxJc_eELXrWe-VAAI7AAMw1J0R_fquFhqHe0weNgQ"
+STICKER_ORDER   = "CAACAgIAAxkBAAIBgWf2xgABHQUhQzFz8M_0vEklFLJvAAIyAAMw1J0R6OTAAWPy2rAeNgQ"
+STICKER_CONTACT = "CAACAgIAAxkBAAIBg2f2xgABpL3p0CqMjWF8FmDHVIwZAAI6AAMw1J0RvpFeBmkDL9keNgQ"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -40,8 +42,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==================== DB ====================
-DB             = {}
-pending_orders = {}
+DB = {}
+
+def get_pending_orders():
+    return DB.setdefault("pending_orders", {})
+
 
 ST_WAITING_TG_USERNAME  = "wt_username"
 ST_WAITING_RECEIPT      = "wt_receipt"
@@ -58,6 +63,7 @@ AP_TG_ADD_PRICE = "ap_tg_add_price"
 
 def load_db():
     global DB
+    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -88,6 +94,7 @@ def _default_db():
         "tg_packages": [],
         "users": {},
         "pending_ads": {},
+        "pending_orders": {},
     }
 
 
@@ -213,7 +220,7 @@ async def cmd_start(update, context):
             price_raw = parts[3].replace("_", " ").strip() if len(parts) > 3 else ""
             price     = int("".join(filter(str.isdigit, price_raw))) if price_raw else 0
 
-            pending_orders[user.id] = {
+            get_pending_orders()[str(user.id)] = {
                 "product": prod_name, "price": price,
                 "section": section,  "recipient": u_input,
                 "source": "website", "type": "website",
@@ -221,6 +228,7 @@ async def cmd_start(update, context):
             context.user_data["state"] = ST_WAITING_RECEIPT
             kb = [[InlineKeyboardButton("✅ To'lov qildim — Chek yuborish",
                                         callback_data="payment_done")]]
+            await send_sticker(user.id, STICKER_ORDER, context.bot)
             await update.message.reply_text(
                 f"Xush kelibsiz, <b>{user.first_name}</b>!\n\n"
                 f"📋 <b>Saytdan buyurtma:</b>\n"
@@ -233,26 +241,27 @@ async def cmd_start(update, context):
                 f"Tel: <b>{CARD_PHONE}</b>\n\n"
                 f"To'lov qilgach chekni yuborish uchun tugmani bosing:",
                 parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
+            save_db()
             return
 
     # Oddiy start — stiker + xush kelibsiz
     await send_sticker(user.id, STICKER_WELCOME, context.bot)
     await update.message.reply_text(
-        f"Assalomu alaykum, <b>{user.first_name}</b>!\n\n"
+        f"Assalomu alaykum, <b>{user.first_name}</b>! 👋\n\n"
         f"<b>TopUp Zone</b> ga xush kelibsiz!\n"
         f"Telegram xizmatlari: Premium, Stars, TON.\n\n"
-        f"Pastdagi menyudan foydalaning:",
+        f"Pastdagi menyudan foydalaning 👇",
         parse_mode=ParseMode.HTML, reply_markup=main_kb(user.id))
     await update.message.reply_text(
         "Do'konni to'liq ochish:",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("Do'konni ochish", web_app=WebAppInfo(url=WEBAPP_URL))
+            InlineKeyboardButton("🛒 Do'konni ochish", web_app=WebAppInfo(url=WEBAPP_URL))
         ]]))
 
 
 async def cmd_cancel(update, context):
     uid = update.effective_user.id
-    pending_orders.pop(uid, None)
+    get_pending_orders().pop(str(uid), None)
     context.user_data.clear()
     await update.message.reply_text("Bekor qilindi.", reply_markup=main_kb(uid))
 
@@ -402,12 +411,14 @@ async def buy_tg_cb(update, context):
     if d.startswith("buy_sq_"):
         n    = int(d[7:])
         rate = DB.get("stars_rate", 250)
-        pending_orders[uid] = {
+        get_pending_orders()[str(uid)] = {
             "product": f"⭐ {n} Stars", "price": n * rate,
             "section": "Telegram Stars", "recipient": None,
             "source": "bot", "type": "stars",
         }
+        save_db()
         context.user_data["state"] = ST_WAITING_TG_USERNAME
+        await send_sticker(uid, STICKER_ORDER, context.bot)
         await q.message.reply_text(
             f"Tanlandi: <b>⭐ {n} Stars</b>\n"
             f"Narxi: <b>{fmt(n * rate)}</b>\n\n"
@@ -421,12 +432,14 @@ async def buy_tg_cb(update, context):
     if d.startswith("buy_tq_"):
         n    = int(d[7:])
         rate = DB.get("ton_rate", 17500)
-        pending_orders[uid] = {
+        get_pending_orders()[str(uid)] = {
             "product": f"💠 {n} TON", "price": n * rate,
             "section": "TON", "recipient": None,
             "source": "bot", "type": "ton",
         }
+        save_db()
         context.user_data["state"] = ST_WAITING_TG_USERNAME
+        await send_sticker(uid, STICKER_ORDER, context.bot)
         await q.message.reply_text(
             f"Tanlandi: <b>💠 {n} TON</b>\n"
             f"Narxi: <b>{fmt(n * rate)}</b>\n\n"
@@ -470,12 +483,14 @@ async def buy_tg_cb(update, context):
 
         # @Username / Hamyon
         order_type = pkg["section"]
-        pending_orders[uid] = {
+        get_pending_orders()[str(uid)] = {
             "product": pkg["name"], "price": pkg["price"],
             "section": tg_sec_name(order_type), "recipient": None,
             "source": "bot", "type": order_type,
         }
+        save_db()
         context.user_data["state"] = ST_WAITING_TG_USERNAME
+        await send_sticker(uid, STICKER_ORDER, context.bot)
 
         if order_type == "ton":
             prompt = (
@@ -507,13 +522,13 @@ async def receive_text(update, context):
 
     # ── Username / Hamyon kutish ──
     if state == ST_WAITING_TG_USERNAME:
-        if uid not in pending_orders:
+        if str(uid) not in get_pending_orders():
             context.user_data.clear()
             await update.message.reply_text(
                 "Buyurtma topilmadi. /start bosing.",
                 reply_markup=main_kb(uid))
             return
-        order_type = pending_orders[uid].get("type", "stars")
+        order_type = get_pending_orders()[str(uid)].get("type", "stars")
         if order_type == "ton":
             if len(text) < 10:
                 await update.message.reply_text(
@@ -528,7 +543,8 @@ async def receive_text(update, context):
                     "Qaytadan kiriting yoki /cancel",
                     parse_mode=ParseMode.HTML)
                 return
-        pending_orders[uid]["recipient"] = text
+        get_pending_orders()[str(uid)]["recipient"] = text
+        save_db()
         context.user_data["state"]       = ST_WAITING_RECEIPT
         await send_payment_info(update, uid)
         return
@@ -566,7 +582,7 @@ async def receive_text(update, context):
 
 
 async def send_payment_info(update, uid):
-    order = pending_orders[uid]
+    order = get_pending_orders()[str(uid)]
     r_lbl = "Hamyon manzili" if order["type"] == "ton" else "@Username"
     kb    = [[InlineKeyboardButton("✅ To'lov qildim — Chek yuborish",
                                    callback_data="payment_done")]]
@@ -589,7 +605,7 @@ async def payment_done_cb(update, context):
     q   = update.callback_query
     await q.answer()
     uid = q.from_user.id
-    if uid not in pending_orders:
+    if str(uid) not in get_pending_orders():
         await q.answer("Buyurtma topilmadi! /start bosing.", show_alert=True)
         return
     context.user_data["state"] = ST_WAITING_RECEIPT
@@ -610,14 +626,14 @@ async def receive_photo(update, context):
 
 async def recv_receipt(update, context):
     uid = update.effective_user.id
-    if context.user_data.get("state") != ST_WAITING_RECEIPT or uid not in pending_orders:
+    if context.user_data.get("state") != ST_WAITING_RECEIPT or str(uid) not in get_pending_orders():
         return
     if not update.message.photo:
         await update.message.reply_text(
             "Faqat rasm (screenshot) yuboring!\n\n/cancel — bekor qilish")
         return
 
-    order = pending_orders[uid]
+    order = get_pending_orders()[str(uid)]
     user  = update.effective_user
     photo = update.message.photo[-1]
     r_lbl = "Hamyon manzili" if order["type"] == "ton" else "@Username"
@@ -656,7 +672,7 @@ async def admin_approve_cb(update, context):
         return
     await q.answer("Tasdiqlandi!")
     tid   = int(q.data[8:])
-    order = pending_orders.get(tid)
+    order = get_pending_orders().get(str(tid))
     if order:
         u = get_user(tid)
         u["orders"].append({
@@ -680,11 +696,18 @@ async def admin_approve_cb(update, context):
                 parse_mode=ParseMode.HTML, reply_markup=main_kb(tid))
         except Exception as e:
             logger.error(f"Tasdiqlash xabarida xato: {e}")
-    pending_orders.pop(tid, None)
+    get_pending_orders().pop(str(tid), None)
+    save_db()
     try:
-        await q.edit_message_caption(
-            caption=(q.message.caption or "") + f"\n\nTaskiqlandi — {q.from_user.full_name}",
-            parse_mode=ParseMode.HTML)
+        suffix = f"\n\n✅ Tasdiqlandi — {q.from_user.full_name}"
+        if q.message.photo:
+            await q.edit_message_caption(
+                caption=(q.message.caption or "") + suffix,
+                parse_mode=ParseMode.HTML)
+        else:
+            await q.edit_message_text(
+                text=(q.message.text or "") + suffix,
+                parse_mode=ParseMode.HTML)
     except Exception:
         pass
 
@@ -696,7 +719,7 @@ async def admin_reject_cb(update, context):
         return
     await q.answer("Rad etildi!")
     tid   = int(q.data[7:])
-    order = pending_orders.get(tid)
+    order = get_pending_orders().get(str(tid))
     try:
         await send_sticker(tid, STICKER_REJECT, context.bot)
         await context.bot.send_message(
@@ -709,11 +732,18 @@ async def admin_reject_cb(update, context):
             parse_mode=ParseMode.HTML, reply_markup=main_kb(tid))
     except Exception as e:
         logger.error(f"Rad etish xabarida xato: {e}")
-    pending_orders.pop(tid, None)
+    get_pending_orders().pop(str(tid), None)
+    save_db()
     try:
-        await q.edit_message_caption(
-            caption=(q.message.caption or "") + f"\n\nRad etildi — {q.from_user.full_name}",
-            parse_mode=ParseMode.HTML)
+        suffix = f"\n\n❌ Rad etildi — {q.from_user.full_name}"
+        if q.message.photo:
+            await q.edit_message_caption(
+                caption=(q.message.caption or "") + suffix,
+                parse_mode=ParseMode.HTML)
+        else:
+            await q.edit_message_text(
+                text=(q.message.text or "") + suffix,
+                parse_mode=ParseMode.HTML)
     except Exception:
         pass
 
@@ -1106,9 +1136,11 @@ async def show_profile(update, context):
 
 
 async def show_contact(update, context):
+    await send_sticker(update.effective_user.id, STICKER_CONTACT, context.bot)
     kb = [[InlineKeyboardButton("💬 Adminga yozish", url=ADMIN_TG_LINK)]]
     await update.message.reply_text(
-        f"Admin: {ADMIN_USERNAME}\n\nSavol yoki muammo bo'lsa yozing:",
+        f"📞 <b>Admin bilan bog'lanish</b>\n\n"
+        f"Admin: {ADMIN_USERNAME}\n\nSavol yoki muammo bo'lsa yozing 👇",
         parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -1278,8 +1310,13 @@ async def adv_approve_cb(update, context):
         except Exception:
             pass
     try:
-        caption = (q.message.caption or "") + f"\n\nTaskiqlandi. {sent} ta yuborildi."
-        await q.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
+        suffix = f"\n\n✅ Tasdiqlandi. {sent} ta yuborildi."
+        if q.message.photo:
+            caption = (q.message.caption or "") + suffix
+            await q.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
+        else:
+            text = (q.message.text or "") + suffix
+            await q.edit_message_text(text=text, parse_mode=ParseMode.HTML)
     except Exception:
         pass
 
@@ -1295,14 +1332,19 @@ async def adv_reject_cb(update, context):
     if ad:
         try:
             await context.bot.send_message(
-                chat_id=ad["from_id"], text="Reklamangiz rad etildi.")
+                chat_id=ad["from_id"], text="❌ Reklamangiz rad etildi.")
         except Exception:
             pass
         ad["status"] = "rejected"
         save_db()
     try:
-        caption = (q.message.caption or "") + "\n\nRad etildi."
-        await q.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
+        suffix = "\n\n❌ Rad etildi."
+        if q.message.photo:
+            caption = (q.message.caption or "") + suffix
+            await q.edit_message_caption(caption=caption, parse_mode=ParseMode.HTML)
+        else:
+            text = (q.message.text or "") + suffix
+            await q.edit_message_text(text=text, parse_mode=ParseMode.HTML)
     except Exception:
         pass
 
