@@ -1,1 +1,1 @@
-worker: python TopUpZone.py
+worker: python bot.py
