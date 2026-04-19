@@ -1,3 +1,1 @@
-telethon==1.36.0
-reportlab==4.2.2
-cryptg
+python-telegram-bot==21.6
